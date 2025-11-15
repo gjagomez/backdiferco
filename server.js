@@ -14,25 +14,14 @@ const PORT = process.env.PORT || 3001;
 // Middlewares
 app.use(cors({
   origin: (origin, callback) => {
-    // Permitir requests sin origin (como Postman, curl, etc.)
-    if (!origin) return callback(null, true);
-
-    // En desarrollo, permitir cualquier puerto de localhost
-    if (process.env.NODE_ENV !== 'production') {
-      if (origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:')) {
-        return callback(null, true);
-      }
-    }
-
-    // En producción, usar el origin específico del .env
-    if (origin === process.env.CORS_ORIGIN) {
-      return callback(null, true);
-    }
-
-    callback(new Error('Not allowed by CORS'));
+    // Permitir cualquier origen
+    return callback(null, true);
   },
-  credentials: true
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -88,7 +77,6 @@ app.use((err, req, res, next) => {
 // Iniciar servidor
 const startServer = async () => {
   try {
-    // Verificar conexión a la base de datos
     const dbConnected = await testConnection();
 
     if (!dbConnected) {
@@ -98,7 +86,6 @@ const startServer = async () => {
       process.exit(1);
     }
 
-    // Iniciar servidor Express
     app.listen(PORT, () => {
       console.log('');
       console.log('╔════════════════════════════════════════════════════════╗');
@@ -115,13 +102,7 @@ const startServer = async () => {
       console.log(`   → Health Check: http://localhost:${PORT}/api/health`);
       console.log(`   → Videos API:   http://localhost:${PORT}/api/videos`);
       console.log(`   → Auth API:     http://localhost:${PORT}/api/auth`);
-      console.log('');
-      console.log('💡 Credenciales admin por defecto:');
-      console.log('   Email: admin@diferco.com');
-      console.log('   Password: diferco2025');
-      console.log('');
-      console.log('📝 Presiona Ctrl+C para detener el servidor');
-      console.log('');
+
     });
   } catch (error) {
     console.error('❌ Error al iniciar el servidor:', error);
@@ -129,7 +110,7 @@ const startServer = async () => {
   }
 };
 
-// Manejo de señales de terminación
+// Manejo de señales
 process.on('SIGINT', () => {
   console.log('\n👋 Cerrando servidor...');
   process.exit(0);
