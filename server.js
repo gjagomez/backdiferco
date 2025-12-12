@@ -4,6 +4,8 @@ import dotenv from 'dotenv';
 import { testConnection } from './config/database.js';
 import videosRouter from './routes/videos.js';
 import authRouter from './routes/auth.js';
+import uploadRouter from './routes/upload.js';
+import { initMega } from './services/megaService.js';
 
 // Cargar variables de entorno
 dotenv.config();
@@ -34,6 +36,7 @@ app.use((req, res, next) => {
 // Rutas
 app.use('/api/videos', videosRouter);
 app.use('/api/auth', authRouter);
+app.use('/api/upload', uploadRouter);
 
 // Ruta de health check
 app.get('/api/health', (req, res) => {
@@ -52,7 +55,8 @@ app.get('/', (req, res) => {
     endpoints: {
       health: '/api/health',
       videos: '/api/videos',
-      auth: '/api/auth'
+      auth: '/api/auth',
+      upload: '/api/upload'
     }
   });
 });
@@ -86,6 +90,15 @@ const startServer = async () => {
       process.exit(1);
     }
 
+    // Inicializar conexión con MEGA (opcional al inicio)
+    let megaStatus = '⚠️  MEGA: No conectado (configura MEGA_EMAIL y MEGA_PASSWORD en .env)';
+    try {
+      await initMega();
+      megaStatus = '☁️  MEGA: Conectado';
+    } catch (megaError) {
+      // MEGA no configurado, continuar sin él
+    }
+
     app.listen(PORT, () => {
       console.log('');
       console.log('╔════════════════════════════════════════════════════════╗');
@@ -102,7 +115,9 @@ const startServer = async () => {
       console.log(`   → Health Check: http://localhost:${PORT}/api/health`);
       console.log(`   → Videos API:   http://localhost:${PORT}/api/videos`);
       console.log(`   → Auth API:     http://localhost:${PORT}/api/auth`);
-
+      console.log(`   → Upload API:   http://localhost:${PORT}/api/upload`);
+      console.log('');
+      console.log(megaStatus);
     });
   } catch (error) {
     console.error('❌ Error al iniciar el servidor:', error);

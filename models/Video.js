@@ -12,6 +12,8 @@ const formatVideoForFrontend = (video) => {
     category: video.category,
     categoryColor: video.category_color,
     publicId: video.public_id, // Convertir a camelCase
+    megaUrl: video.mega_url, // URL del video en MEGA
+    megaFileId: video.mega_file_id, // ID del archivo en MEGA
     views: video.views,
     likes: video.likes,
     date: video.date,
@@ -32,6 +34,8 @@ const formatAdditionalVideo = (video) => {
     videoId: video.video_id,
     title: video.title,
     publicId: video.public_id, // Convertir a camelCase
+    megaUrl: video.mega_url, // URL del video adicional en MEGA
+    megaFileId: video.mega_file_id, // ID del archivo en MEGA
     thumbnail: video.thumbnail,
     createdAt: video.created_at
   };
@@ -151,9 +155,9 @@ export const Video = {
       await connection.query(`
         INSERT INTO videos (
           id, nog, title, description, category, category_color,
-          public_id, views, likes, date, duration, featured,
+          public_id, mega_url, mega_file_id, views, likes, date, duration, featured,
           border_color, card_color
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [
         id,
         nog,
@@ -161,7 +165,9 @@ export const Video = {
         videoData.description,
         videoData.category,
         videoData.categoryColor || videoData.category_color,
-        videoData.publicId,
+        videoData.publicId || null,
+        videoData.megaUrl || null,
+        videoData.megaFileId || null,
         videoData.views || '0',
         videoData.likes || 0,
         videoData.date || 'Hace unos momentos',
@@ -204,6 +210,14 @@ export const Video = {
       if (updates.publicId !== undefined) {
         fields.push('public_id = ?');
         values.push(updates.publicId);
+      }
+      if (updates.megaUrl !== undefined) {
+        fields.push('mega_url = ?');
+        values.push(updates.megaUrl);
+      }
+      if (updates.megaFileId !== undefined) {
+        fields.push('mega_file_id = ?');
+        values.push(updates.megaFileId);
       }
       if (updates.nog !== undefined) {
         fields.push('nog = ?');
@@ -273,13 +287,15 @@ export const Video = {
       const id = crypto.randomUUID();
 
       await connection.query(`
-        INSERT INTO additional_videos (id, video_id, title, public_id, thumbnail)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO additional_videos (id, video_id, title, public_id, mega_url, mega_file_id, thumbnail)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
       `, [
         id,
         videoId,
         additionalVideo.title,
-        additionalVideo.publicId,
+        additionalVideo.publicId || null,
+        additionalVideo.megaUrl || null,
+        additionalVideo.megaFileId || null,
         additionalVideo.thumbnail || null
       ]);
 
