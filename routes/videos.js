@@ -104,4 +104,33 @@ router.post('/:id/additional', async (req, res) => {
   }
 });
 
+// PUT /api/videos/additional/:additionalId - Actualizar video adicional
+router.put('/additional/:additionalId', async (req, res) => {
+  try {
+    const updated = await Video.updateAdditionalVideo(req.params.additionalId, req.body);
+    if (!updated) {
+      return res.status(404).json({ error: 'Video adicional no encontrado' });
+    }
+    const additionalVideo = await Video.getAdditionalVideoById(req.params.additionalId);
+    res.json(additionalVideo);
+  } catch (error) {
+    console.error('Error al actualizar video adicional:', error);
+    res.status(500).json({ error: 'Error al actualizar video adicional' });
+  }
+});
+
+// DELETE /api/videos/additional/:additionalId - Eliminar video adicional
+router.delete('/additional/:additionalId', async (req, res) => {
+  try {
+    const deleted = await Video.deleteAdditionalVideo(req.params.additionalId);
+    if (!deleted) {
+      return res.status(404).json({ error: 'Video adicional no encontrado' });
+    }
+    res.json({ message: 'Video adicional eliminado correctamente' });
+  } catch (error) {
+    console.error('Error al eliminar video adicional:', error);
+    res.status(500).json({ error: 'Error al eliminar video adicional' });
+  }
+});
+
 export default router;

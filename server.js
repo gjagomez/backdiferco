@@ -5,7 +5,7 @@ import { testConnection } from './config/database.js';
 import videosRouter from './routes/videos.js';
 import authRouter from './routes/auth.js';
 import uploadRouter from './routes/upload.js';
-import { initMega } from './services/megaService.js';
+import { initGCS } from './services/gcsService.js';
 
 // Cargar variables de entorno
 dotenv.config();
@@ -13,7 +13,7 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Middlewares - CORS permitir todos los orígenes
+// Middlewares - CORS permitir todos los origenes
 app.use(cors({
   origin: '*',
   credentials: false,
@@ -57,11 +57,12 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Ruta raíz
+// Ruta raiz
 app.get('/', (req, res) => {
   res.json({
     message: 'DIFERCO Videos API',
-    version: '1.0.0',
+    version: '2.0.0',
+    storage: 'Google Cloud Storage',
     endpoints: {
       health: '/api/health',
       videos: '/api/videos',
@@ -94,55 +95,55 @@ const startServer = async () => {
     const dbConnected = await testConnection();
 
     if (!dbConnected) {
-      console.error('❌ No se pudo conectar a MySQL');
-      console.error('ℹ️  Asegúrate de que MySQL esté corriendo y las credenciales sean correctas');
-      console.error('ℹ️  Ejecuta primero: npm run init-db');
+      console.error('No se pudo conectar a MySQL');
+      console.error('Asegurate de que MySQL este corriendo y las credenciales sean correctas');
+      console.error('Ejecuta primero: npm run init-db');
       process.exit(1);
     }
 
-    // Inicializar conexión con MEGA (opcional al inicio)
-    let megaStatus = '⚠️  MEGA: No conectado (configura MEGA_EMAIL y MEGA_PASSWORD en .env)';
+    // Inicializar conexion con Google Cloud Storage
+    let gcsStatus = 'Google Cloud Storage: No conectado (configura GCS_BUCKET_NAME y credenciales)';
     try {
-      await initMega();
-      megaStatus = '☁️  MEGA: Conectado';
-    } catch (megaError) {
-      // MEGA no configurado, continuar sin él
+      await initGCS();
+      gcsStatus = 'Google Cloud Storage: Conectado';
+    } catch (gcsError) {
+      console.warn('Google Cloud Storage no configurado:', gcsError.message);
     }
 
     app.listen(PORT, () => {
       console.log('');
-      console.log('╔════════════════════════════════════════════════════════╗');
-      console.log('║                                                        ║');
-      console.log('║       🚀 DIFERCO Videos API Server Running! 🚀        ║');
-      console.log('║                                                        ║');
-      console.log('╚════════════════════════════════════════════════════════╝');
+      console.log('========================================================');
+      console.log('                                                        ');
+      console.log('       DIFERCO Videos API Server Running!               ');
+      console.log('                                                        ');
+      console.log('========================================================');
       console.log('');
-      console.log(`🌐 Servidor corriendo en: http://localhost:${PORT}`);
-      console.log(`📊 Base de datos: ${process.env.DB_NAME}`);
-      console.log(`🔧 Ambiente: ${process.env.NODE_ENV || 'development'}`);
+      console.log(`Servidor corriendo en: http://localhost:${PORT}`);
+      console.log(`Base de datos: ${process.env.DB_NAME}`);
+      console.log(`Ambiente: ${process.env.NODE_ENV || 'development'}`);
       console.log('');
-      console.log('📡 Endpoints disponibles:');
-      console.log(`   → Health Check: http://localhost:${PORT}/api/health`);
-      console.log(`   → Videos API:   http://localhost:${PORT}/api/videos`);
-      console.log(`   → Auth API:     http://localhost:${PORT}/api/auth`);
-      console.log(`   → Upload API:   http://localhost:${PORT}/api/upload`);
+      console.log('Endpoints disponibles:');
+      console.log(`   -> Health Check: http://localhost:${PORT}/api/health`);
+      console.log(`   -> Videos API:   http://localhost:${PORT}/api/videos`);
+      console.log(`   -> Auth API:     http://localhost:${PORT}/api/auth`);
+      console.log(`   -> Upload API:   http://localhost:${PORT}/api/upload`);
       console.log('');
-      console.log(megaStatus);
+      console.log(gcsStatus);
     });
   } catch (error) {
-    console.error('❌ Error al iniciar el servidor:', error);
+    console.error('Error al iniciar el servidor:', error);
     process.exit(1);
   }
 };
 
-// Manejo de señales
+// Manejo de senales
 process.on('SIGINT', () => {
-  console.log('\n👋 Cerrando servidor...');
+  console.log('\nCerrando servidor...');
   process.exit(0);
 });
 
 process.on('SIGTERM', () => {
-  console.log('\n👋 Cerrando servidor...');
+  console.log('\nCerrando servidor...');
   process.exit(0);
 });
 

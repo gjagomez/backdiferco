@@ -1,17 +1,17 @@
 import express from 'express';
 import multer from 'multer';
 import path from 'path';
-import { uploadBufferToMega, listFiles, deleteFromMega, getStreamFromMegaUrl } from '../services/megaService.js';
+import { uploadToGCS, listFiles, deleteFromGCS } from '../services/gcsService.js';
 
 const router = express.Router();
 
-// Configuración de multer para almacenar en memoria
+// Configuracion de multer para almacenar en memoria
 const storage = multer.memoryStorage();
 
 const upload = multer({
   storage: storage,
   limits: {
-    fileSize: 500 * 1024 * 1024, // Límite de 500MB
+    fileSize: 500 * 1024 * 1024, // Limite de 500MB
   },
   fileFilter: (req, file, cb) => {
     // Aceptar videos y otros formatos multimedia
@@ -36,21 +36,21 @@ const upload = multer({
 
 /**
  * POST /api/upload/video
- * Sube un video a MEGA y retorna la URL pública
+ * Sube un video a Google Cloud Storage y retorna la URL publica
  */
 router.post('/video', upload.single('video'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({
         success: false,
-        message: 'No se recibió ningún archivo de video'
+        message: 'No se recibio ningun archivo de video'
       });
     }
 
-    const { originalname, buffer, size } = req.file;
-    const folderName = req.body.folder || 'Videos';
+    const { originalname, buffer, size, mimetype } = req.file;
+    const folderName = req.body.folder || 'videos';
 
-    // Generar nombre único para el archivo
+    // Generar nombre unico para el archivo
     const timestamp = Date.now();
     const ext = path.extname(originalname);
     const baseName = path.basename(originalname, ext);
@@ -58,19 +58,19 @@ router.post('/video', upload.single('video'), async (req, res) => {
 
     console.log(`Recibido archivo: ${originalname} (${(size / 1024 / 1024).toFixed(2)} MB)`);
 
-    // Subir a MEGA
-    const result = await uploadBufferToMega(buffer, uniqueName, size, folderName);
+    // Subir a Google Cloud Storage
+    const result = await uploadToGCS(buffer, uniqueName, mimetype, folderName);
 
     res.json({
       success: true,
-      message: 'Video subido exitosamente a MEGA',
+      message: 'Video subido exitosamente a Google Cloud Storage',
       data: {
         url: result.url,
-        fileId: result.fileId,
-        fileName: result.name,
+        fileName: result.fileName,
         originalName: originalname,
         size: result.size,
-        sizeFormatted: `${(result.size / 1024 / 1024).toFixed(2)} MB`
+        sizeFormatted: `${(result.size / 1024 / 1024).toFixed(2)} MB`,
+        bucket: result.bucket
       }
     });
 
@@ -86,7 +86,7 @@ router.post('/video', upload.single('video'), async (req, res) => {
 
 /**
  * POST /api/upload/multiple
- * Sube múltiples videos a MEGA
+ * Sube multiples videos a Google Cloud Storage
  */
 router.post('/multiple', upload.array('videos', 10), async (req, res) => {
   try {
@@ -97,24 +97,23 @@ router.post('/multiple', upload.array('videos', 10), async (req, res) => {
       });
     }
 
-    const folderName = req.body.folder || 'Videos';
+    const folderName = req.body.folder || 'videos';
     const results = [];
 
     for (const file of req.files) {
-      const { originalname, buffer, size } = file;
+      const { originalname, buffer, size, mimetype } = file;
       const timestamp = Date.now();
       const ext = path.extname(originalname);
       const baseName = path.basename(originalname, ext);
       const uniqueName = `${baseName}_${timestamp}${ext}`;
 
       try {
-        const result = await uploadBufferToMega(buffer, uniqueName, size, folderName);
+        const result = await uploadToGCS(buffer, uniqueName, mimetype, folderName);
         results.push({
           success: true,
           originalName: originalname,
           url: result.url,
-          fileId: result.fileId,
-          fileName: result.name,
+          fileName: result.fileName,
           size: result.size
         });
       } catch (uploadError) {
@@ -146,11 +145,11 @@ router.post('/multiple', upload.array('videos', 10), async (req, res) => {
 
 /**
  * GET /api/upload/list
- * Lista los archivos en la carpeta de Videos de MEGA
+ * Lista los archivos en la carpeta de Videos de Google Cloud Storage
  */
 router.get('/list', async (req, res) => {
   try {
-    const folderName = req.query.folder || 'Videos';
+    const folderName = req.query.folder || 'videos';
     const files = await listFiles(folderName);
 
     res.json({
@@ -169,117 +168,40 @@ router.get('/list', async (req, res) => {
     console.error('Error al listar archivos:', error);
     res.status(500).json({
       success: false,
-      message: 'Error al listar archivos de MEGA',
+      message: 'Error al listar archivos de Google Cloud Storage',
       error: error.message
     });
   }
 });
 
 /**
- * GET /api/upload/stream
- * Hace streaming de un video desde MEGA (proxy)
- * Query params: url (URL de MEGA codificada)
+ * DELETE /api/upload/:fileName
+ * Elimina un archivo de Google Cloud Storage
+ * El fileName debe incluir la carpeta (ej: videos/archivo.mp4)
  */
-router.get('/stream', async (req, res) => {
+router.delete('/:fileName(*)', async (req, res) => {
   try {
-    const megaUrl = req.query.url;
+    const { fileName } = req.params;
 
-    if (!megaUrl) {
-      return res.status(400).json({
-        success: false,
-        message: 'Se requiere el parámetro url'
+    const deleted = await deleteFromGCS(fileName);
+
+    if (deleted) {
+      res.json({
+        success: true,
+        message: 'Archivo eliminado exitosamente de Google Cloud Storage'
       });
-    }
-
-    // Decodificar la URL
-    const decodedUrl = decodeURIComponent(megaUrl);
-
-    console.log(`Iniciando streaming desde MEGA: ${decodedUrl}`);
-
-    // Obtener info del archivo
-    const { file, size, name } = await getStreamFromMegaUrl(decodedUrl);
-
-    // Manejar Range requests para seeking en el video
-    const range = req.headers.range;
-
-    if (range) {
-      const parts = range.replace(/bytes=/, '').split('-');
-      const start = parseInt(parts[0], 10);
-      const end = parts[1] ? parseInt(parts[1], 10) : size - 1;
-      const chunkSize = end - start + 1;
-
-      console.log(`Range request: ${start}-${end}/${size}`);
-
-      res.writeHead(206, {
-        'Content-Range': `bytes ${start}-${end}/${size}`,
-        'Accept-Ranges': 'bytes',
-        'Content-Length': chunkSize,
-        'Content-Type': 'video/mp4',
-        'Cache-Control': 'public, max-age=3600'
-      });
-
-      const stream = file.download({ start, end: end + 1 });
-      stream.pipe(res);
-
-      stream.on('error', (err) => {
-        console.error('Error en stream:', err);
-        if (!res.headersSent) {
-          res.status(500).end();
-        }
-      });
-
     } else {
-      // Sin range, enviar todo el archivo
-      res.writeHead(200, {
-        'Content-Length': size,
-        'Content-Type': 'video/mp4',
-        'Accept-Ranges': 'bytes',
-        'Cache-Control': 'public, max-age=3600'
-      });
-
-      const stream = file.download();
-      stream.pipe(res);
-
-      stream.on('error', (err) => {
-        console.error('Error en stream:', err);
-        if (!res.headersSent) {
-          res.status(500).end();
-        }
-      });
-    }
-
-  } catch (error) {
-    console.error('Error en streaming:', error);
-    if (!res.headersSent) {
-      res.status(500).json({
+      res.status(404).json({
         success: false,
-        message: 'Error al hacer streaming del video',
-        error: error.message
+        message: 'Archivo no encontrado'
       });
     }
-  }
-});
-
-/**
- * DELETE /api/upload/:fileId
- * Elimina un archivo de MEGA
- */
-router.delete('/:fileId', async (req, res) => {
-  try {
-    const { fileId } = req.params;
-
-    await deleteFromMega(fileId);
-
-    res.json({
-      success: true,
-      message: 'Archivo eliminado exitosamente de MEGA'
-    });
 
   } catch (error) {
     console.error('Error al eliminar archivo:', error);
     res.status(500).json({
       success: false,
-      message: 'Error al eliminar archivo de MEGA',
+      message: 'Error al eliminar archivo de Google Cloud Storage',
       error: error.message
     });
   }
@@ -291,7 +213,7 @@ router.use((error, req, res, next) => {
     if (error.code === 'LIMIT_FILE_SIZE') {
       return res.status(400).json({
         success: false,
-        message: 'El archivo excede el tamaño máximo permitido (500MB)'
+        message: 'El archivo excede el tamano maximo permitido (500MB)'
       });
     }
     return res.status(400).json({

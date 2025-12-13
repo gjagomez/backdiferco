@@ -9,7 +9,7 @@
     "dev": "nodemon server.js",
     "init-db": "node scripts/initDatabase.js",
     "migrate": "node scripts/migrateFromSupabase.js",
-    "add-mega": "node scripts/addMegaColumns.js"
+    "migrate-gcs": "node scripts/migrateToGCS.js"
   },
   "keywords": [
     "express",
@@ -20,6 +20,7 @@
   "author": "DIFERCO",
   "license": "ISC",
   "dependencies": {
+    "@google-cloud/storage": "^7.18.0",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",

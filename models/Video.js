@@ -7,13 +7,14 @@ const formatVideoForFrontend = (video) => {
   return {
     id: video.id,
     nog: video.nog,
-    title: video.nog ? `NOG: ${video.nog}` : video.title, // Formato: "NOG: 27436365"
+    title: video.nog ? `NOG: ${video.nog}` : video.title,
     description: video.description,
     category: video.category,
     categoryColor: video.category_color,
-    publicId: video.public_id, // Convertir a camelCase
-    megaUrl: video.mega_url, // URL del video en MEGA
-    megaFileId: video.mega_file_id, // ID del archivo en MEGA
+    publicId: video.public_id,
+    // Campos de Google Cloud Storage
+    gcsUrl: video.gcs_url,
+    gcsFileName: video.gcs_file_name,
     views: video.views,
     likes: video.likes,
     date: video.date,
@@ -33,9 +34,10 @@ const formatAdditionalVideo = (video) => {
     id: video.id,
     videoId: video.video_id,
     title: video.title,
-    publicId: video.public_id, // Convertir a camelCase
-    megaUrl: video.mega_url, // URL del video adicional en MEGA
-    megaFileId: video.mega_file_id, // ID del archivo en MEGA
+    publicId: video.public_id,
+    // Campos de Google Cloud Storage
+    gcsUrl: video.gcs_url,
+    gcsFileName: video.gcs_file_name,
     thumbnail: video.thumbnail,
     createdAt: video.created_at
   };
@@ -155,7 +157,7 @@ export const Video = {
       await connection.query(`
         INSERT INTO videos (
           id, nog, title, description, category, category_color,
-          public_id, mega_url, mega_file_id, views, likes, date, duration, featured,
+          public_id, gcs_url, gcs_file_name, views, likes, date, duration, featured,
           border_color, card_color
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [
@@ -166,8 +168,8 @@ export const Video = {
         videoData.category,
         videoData.categoryColor || videoData.category_color,
         videoData.publicId || null,
-        videoData.megaUrl || null,
-        videoData.megaFileId || null,
+        videoData.gcsUrl || null,
+        videoData.gcsFileName || null,
         videoData.views || '0',
         videoData.likes || 0,
         videoData.date || 'Hace unos momentos',
@@ -190,7 +192,7 @@ export const Video = {
       const fields = [];
       const values = [];
 
-      // Construir query dinámicamente
+      // Construir query dinamicamente
       if (updates.title !== undefined) {
         fields.push('title = ?');
         values.push(updates.title);
@@ -211,13 +213,13 @@ export const Video = {
         fields.push('public_id = ?');
         values.push(updates.publicId);
       }
-      if (updates.megaUrl !== undefined) {
-        fields.push('mega_url = ?');
-        values.push(updates.megaUrl);
+      if (updates.gcsUrl !== undefined) {
+        fields.push('gcs_url = ?');
+        values.push(updates.gcsUrl);
       }
-      if (updates.megaFileId !== undefined) {
-        fields.push('mega_file_id = ?');
-        values.push(updates.megaFileId);
+      if (updates.gcsFileName !== undefined) {
+        fields.push('gcs_file_name = ?');
+        values.push(updates.gcsFileName);
       }
       if (updates.nog !== undefined) {
         fields.push('nog = ?');
@@ -287,17 +289,62 @@ export const Video = {
       const id = crypto.randomUUID();
 
       await connection.query(`
-        INSERT INTO additional_videos (id, video_id, title, public_id, mega_url, mega_file_id, thumbnail)
+        INSERT INTO additional_videos (id, video_id, title, public_id, gcs_url, gcs_file_name, thumbnail)
         VALUES (?, ?, ?, ?, ?, ?, ?)
       `, [
         id,
         videoId,
         additionalVideo.title,
         additionalVideo.publicId || null,
-        additionalVideo.megaUrl || null,
-        additionalVideo.megaFileId || null,
+        additionalVideo.gcsUrl || null,
+        additionalVideo.gcsFileName || null,
         additionalVideo.thumbnail || null
       ]);
+
+      return id;
+    } finally {
+      connection.release();
+    }
+  },
+
+  // Actualizar video adicional
+  async updateAdditionalVideo(additionalVideoId, updates) {
+    const connection = await pool.getConnection();
+    try {
+      const fields = [];
+      const values = [];
+
+      if (updates.title !== undefined) {
+        fields.push('title = ?');
+        values.push(updates.title);
+      }
+      if (updates.publicId !== undefined) {
+        fields.push('public_id = ?');
+        values.push(updates.publicId);
+      }
+      if (updates.gcsUrl !== undefined) {
+        fields.push('gcs_url = ?');
+        values.push(updates.gcsUrl);
+      }
+      if (updates.gcsFileName !== undefined) {
+        fields.push('gcs_file_name = ?');
+        values.push(updates.gcsFileName);
+      }
+      if (updates.thumbnail !== undefined) {
+        fields.push('thumbnail = ?');
+        values.push(updates.thumbnail);
+      }
+
+      if (fields.length === 0) {
+        return false;
+      }
+
+      values.push(additionalVideoId);
+
+      await connection.query(
+        `UPDATE additional_videos SET ${fields.join(', ')} WHERE id = ?`,
+        values
+      );
 
       return true;
     } finally {
@@ -305,7 +352,35 @@ export const Video = {
     }
   },
 
-  // Generar NOG único
+  // Eliminar video adicional
+  async deleteAdditionalVideo(additionalVideoId) {
+    const connection = await pool.getConnection();
+    try {
+      const [result] = await connection.query(
+        'DELETE FROM additional_videos WHERE id = ?',
+        [additionalVideoId]
+      );
+      return result.affectedRows > 0;
+    } finally {
+      connection.release();
+    }
+  },
+
+  // Obtener video adicional por ID
+  async getAdditionalVideoById(additionalVideoId) {
+    const connection = await pool.getConnection();
+    try {
+      const [videos] = await connection.query(
+        'SELECT * FROM additional_videos WHERE id = ?',
+        [additionalVideoId]
+      );
+      return videos.length > 0 ? formatAdditionalVideo(videos[0]) : null;
+    } finally {
+      connection.release();
+    }
+  },
+
+  // Generar NOG unico
   generateNog() {
     const timestamp = Date.now().toString();
     const random = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
